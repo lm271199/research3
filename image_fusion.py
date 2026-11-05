@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 实验三：基于 SIFT 特征的图像拼接与融合（image_fusion.py）
-=========================================================
 流程：
   1. 读入待拼接图像 a.jpg（左）与 b.jpg（右），转灰度图
   2. SIFT 提取关键点与描述子
@@ -18,7 +17,7 @@
 import cv2
 import numpy as np
 
-# ---------- 1. 读入图像 ----------
+# 1. 读入图像
 img_a = cv2.imread("a.jpg")   # 左图（基准图）
 img_b = cv2.imread("b.jpg")   # 右图（将被变换到 a 的坐标系）
 if img_a is None or img_b is None:
@@ -27,13 +26,13 @@ if img_a is None or img_b is None:
 gray_a = cv2.cvtColor(img_a, cv2.COLOR_BGR2GRAY)
 gray_b = cv2.cvtColor(img_b, cv2.COLOR_BGR2GRAY)
 
-# ---------- 2. SIFT 特征提取 ----------
+# 2. SIFT 特征提取
 sift = cv2.SIFT_create()
 kp_a, des_a = sift.detectAndCompute(gray_a, None)
 kp_b, des_b = sift.detectAndCompute(gray_b, None)
 print(f"SIFT 关键点数量:  a={len(kp_a)}, b={len(kp_b)}")
 
-# ---------- 3. FLANN 匹配 + Lowe 比率测试 ----------
+# 3. FLANN 匹配 + Lowe 比率测试
 FLANN_INDEX_KDTREE = 1
 index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
 search_params = dict(checks=50)          # 检查次数越多越准，但越慢
@@ -53,7 +52,7 @@ matched_keypoints_img = cv2.drawMatches(
 if len(good_matches) < 4:
     raise RuntimeError("优质匹配点不足 4 对，无法估计单应矩阵。")
 
-# ---------- 4. RANSAC 估计单应矩阵 ----------
+# 4. RANSAC 估计单应矩阵
 src_pts = np.float32([kp_b[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
 dst_pts = np.float32([kp_a[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
 H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
@@ -77,12 +76,12 @@ translation_matrix = np.array([[1, 0, -x_min],
                                [0, 0, 1]], dtype=np.float64)
 T_H = translation_matrix @ H
 
-# ---------- 6. 透视变换 + 加权融合 ----------
+# 6. 透视变换 + 加权融合
 canvas = cv2.warpPerspective(img_b, T_H, (x_max - x_min, y_max - y_min))
 
 # a 在画布中的放置位置
 x0, y0 = -x_min, -y_min
-stitched_direct = canvas.copy()                       # 直接覆盖版（参考代码做法）
+stitched_direct = canvas.copy()                      
 stitched_direct[y0:y0 + h_a, x0:x0 + w_a] = img_a
 
 # 加权渐入渐出融合版
@@ -97,7 +96,7 @@ alpha = np.where(overlap, 1.0 - xs, 1.0)[..., None]   # a 的权重
 roi[:] = (img_a * alpha + roi * (1 - alpha)).astype(np.uint8)
 stitched_fused[y0:y0 + h_a, x0:x0 + w_a] = roi
 
-# ---------- 7. 裁剪黑边 ----------
+# 7. 裁剪黑边
 def crop_black(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     ys, xs = np.where(gray > 0)
@@ -108,13 +107,13 @@ def crop_black(img):
 stitched_direct = crop_black(stitched_direct)
 stitched_fused = crop_black(stitched_fused)
 
-# ---------- 8. 保存结果 ----------
+# 8. 保存结果
 cv2.imwrite("result_matches.jpg", matched_keypoints_img)
 cv2.imwrite("result_direct.jpg", stitched_direct)
 cv2.imwrite("result_fused.jpg", stitched_fused)
 print("已保存: result_matches.jpg / result_direct.jpg / result_fused.jpg")
 
-# ---------- 9. 显示（带 --show 参数时才弹窗，服务器无图形环境可跳过） ----------
+# 9. 显示
 import sys
 if "--show" in sys.argv:
     cv2.imshow("Matched SIFT Keypoints", cv2.resize(matched_keypoints_img, None, fx=0.4, fy=0.4))
